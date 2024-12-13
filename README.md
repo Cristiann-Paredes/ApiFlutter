@@ -1,6 +1,8 @@
 # Taller flutter API
 
 
+## Nombres: Cristian Paredes
+##          Alan Rios
 
 Clonar:
 https://github.com/jzaldumbide/pokemonapi_flutter
