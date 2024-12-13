@@ -12,57 +12,91 @@ class PokemonApp extends StatelessWidget {
     return MaterialApp(
       title: 'Pokémon API',
       theme: ThemeData(primarySwatch: Colors.blue),
-      home: PokemonList(),
+      home: HomeScreen(),
     );
   }
 }
 
-class PokemonList extends StatefulWidget {
+class HomeScreen extends StatelessWidget {
   @override
-  _PokemonListState createState() => _PokemonListState();
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('API Explorer'),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                      builder: (context) => PokemonSearchScreen()),
+                );
+              },
+              child: Text('Buscar Pokémon'),
+            ),
+            SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => CatFactsScreen()),
+                );
+              },
+              child: Text('Datos de Gatos (Cat Facts)'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
-class _PokemonListState extends State<PokemonList> {
-  List<Map<String, dynamic>> _pokemonList = [];
+class PokemonSearchScreen extends StatefulWidget {
+  @override
+  _PokemonSearchScreenState createState() => _PokemonSearchScreenState();
+}
+
+class _PokemonSearchScreenState extends State<PokemonSearchScreen> {
+  final TextEditingController _controller = TextEditingController();
+  Map<String, dynamic>? _pokemonData;
   bool _isLoading = false;
 
-  @override
-  void initState() {
-    super.initState();
-    fetchPokemon();
-  }
-
-  Future<void> fetchPokemon() async {
+  Future<void> fetchPokemon(String name) async {
     setState(() {
       _isLoading = true;
     });
 
-    final url = Uri.parse('https://pokeapi.co/api/v2/pokemon?limit=50');
     try {
+      final url = Uri.parse('https://pokeapi.co/api/v2/pokemon/$name');
       final response = await http.get(url);
+
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
-        final List results = data['results'];
-
-        List<Map<String, dynamic>> pokemonWithImages = [];
-
-        for (var pokemon in results) {
-          final detailsResponse = await http.get(Uri.parse(pokemon['url']));
-          if (detailsResponse.statusCode == 200) {
-            final detailsData = json.decode(detailsResponse.body);
-            pokemonWithImages.add({
-              'name': pokemon['name'],
-              'image': detailsData['sprites']['front_default'],
-            });
-          }
-        }
 
         setState(() {
-          _pokemonList = pokemonWithImages;
+          _pokemonData = {
+            'name': data['name'],
+            'image': data['sprites']['front_default'],
+            'height': data['height'],
+            'weight': data['weight'],
+            'types': (data['types'] as List)
+                .map((type) => type['type']['name'])
+                .toList(),
+          };
           _isLoading = false;
         });
       } else {
-        throw Exception('Error al cargar los Pokémon.');
+        setState(() {
+          _pokemonData = null;
+          _isLoading = false;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Pokémon no encontrado')),
+        );
       }
     } catch (e) {
       setState(() {
@@ -76,22 +110,138 @@ class _PokemonListState extends State<PokemonList> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Lista de Pokémon'),
+        title: Text('Buscar Pokémon'),
       ),
-      body: _isLoading
-          ? Center(child: CircularProgressIndicator())
-          : ListView.builder(
-              itemCount: _pokemonList.length,
-              itemBuilder: (context, index) {
-                final pokemon = _pokemonList[index];
-                return ListTile(
-                  leading: pokemon['image'] != null
-                      ? Image.network(pokemon['image'])
-                      : Icon(Icons.image_not_supported),
-                  title: Text(pokemon['name']),
-                );
-              },
+      body: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextField(
+              controller: _controller,
+              decoration: InputDecoration(
+                labelText: 'Nombre del Pokémon',
+                border: OutlineInputBorder(),
+              ),
             ),
+            SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: () => fetchPokemon(_controller.text.toLowerCase()),
+              child: Text('Buscar'),
+            ),
+            SizedBox(height: 16),
+            _isLoading
+                ? CircularProgressIndicator()
+                : _pokemonData != null
+                    ? Column(
+                        children: [
+                          if (_pokemonData!['image'] != null)
+                            Image.network(_pokemonData!['image']),
+                          SizedBox(height: 8),
+                          Text('Nombre: ${_pokemonData!['name']}',
+                              style: TextStyle(fontSize: 18)),
+                          Text('Altura: ${_pokemonData!['height']}'),
+                          Text('Peso: ${_pokemonData!['weight']}'),
+                          Text('Tipos: ${_pokemonData!['types'].join(', ')}'),
+                        ],
+                      )
+                    : Text('Introduce un nombre para buscar'),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CatFactsScreen extends StatefulWidget {
+  @override
+  _CatFactsScreenState createState() => _CatFactsScreenState();
+}
+
+class _CatFactsScreenState extends State<CatFactsScreen> {
+  String? _catFact;
+  String? _catImageUrl;
+  bool _isLoading = false;
+
+  Future<void> fetchCatFactAndImage() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // Fetch Cat Fact
+      final factUrl = Uri.parse('https://catfact.ninja/fact');
+      final factResponse = await http.get(factUrl);
+
+      // Fetch Cat Image
+      final imageUrl = Uri.parse('https://api.thecatapi.com/v1/images/search');
+      final imageResponse = await http.get(imageUrl);
+
+      if (factResponse.statusCode == 200 && imageResponse.statusCode == 200) {
+        final factData = json.decode(factResponse.body);
+        final imageData = json.decode(imageResponse.body);
+
+        setState(() {
+          _catFact = factData['fact'];
+          _catImageUrl = imageData[0]['url'];
+          _isLoading = false;
+        });
+      } else {
+        setState(() {
+          _catFact = 'No se pudo obtener el dato.';
+          _catImageUrl = null;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      setState(() {
+        _isLoading = false;
+        _catFact = 'Error al cargar datos.';
+        _catImageUrl = null;
+      });
+      print('Error: $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Datos e Imágenes de Gatos'),
+      ),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _isLoading
+                ? CircularProgressIndicator()
+                : Column(
+                    children: [
+                      if (_catImageUrl != null)
+                        Image.network(
+                          _catImageUrl!,
+                          height: 200,
+                          fit: BoxFit.cover,
+                        ),
+                      SizedBox(height: 16),
+                      if (_catFact != null)
+                        Padding(
+                          padding: const EdgeInsets.all(16.0),
+                          child: Text(
+                            _catFact!,
+                            style: TextStyle(fontSize: 18),
+                            textAlign: TextAlign.center,
+                          ),
+                        ),
+                    ],
+                  ),
+            SizedBox(height: 16),
+            ElevatedButton(
+              onPressed: fetchCatFactAndImage,
+              child: Text('Obtener Dato e Imagen'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
